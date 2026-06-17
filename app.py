@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
 
 # -----------------------------
 # RSI CALCULATION
@@ -31,8 +30,13 @@ def timeframe_analysis(symbol, period, interval):
         progress=False
     )
 
-    if df.empty:
-        return {"error": "No data returned from Yahoo Finance."}
+    # No data at all
+    if df is None or df.empty:
+        return {"error": "No data returned from Yahoo Finance. Check symbol or market hours."}
+
+    # Basic sanity: need enough rows
+    if len(df) < 50:
+        return {"error": "Not enough candles for this interval. Try a larger period like 1mo or 3mo."}
 
     close = df["Close"]
     df["RSI"] = calculate_rsi(close, 14)
@@ -40,9 +44,9 @@ def timeframe_analysis(symbol, period, interval):
 
     latest = df.iloc[-1]
 
-    # SAFETY CHECKS
-    if np.isnan(latest["RSI"]) or np.isnan(latest["RSI_MA20"]):
-        return {"error": "Not enough data to calculate RSI. Try a larger period like 1mo."}
+    # SAFETY CHECKS (bulletproof)
+    if pd.isna(latest.get("RSI")) or pd.isna(latest.get("RSI_MA20")):
+        return {"error": "RSI values not ready yet. Try a larger period or different interval."}
 
     rsi = float(latest["RSI"])
     rsi_ma = float(latest["RSI_MA20"])
@@ -78,13 +82,14 @@ if st.button("Run Analysis", use_container_width=True):
     tf5 = timeframe_analysis(symbol, period, "5m")
     tf15 = timeframe_analysis(symbol, period, "15m")
 
-    # ERROR HANDLING
+    # Handle errors gracefully
     if "error" in tf5:
-        st.error("5m Error: " + tf5["error"])
-        st.stop()
-
+        st.error("5m timeframe: " + tf5["error"])
     if "error" in tf15:
-        st.error("15m Error: " + tf15["error"])
+        st.error("15m timeframe: " + tf15["error"])
+
+    # If either failed, stop here
+    if ("error" in tf5) or ("error" in tf15):
         st.stop()
 
     col1, col2 = st.columns(2)
@@ -108,5 +113,5 @@ if st.button("Run Analysis", use_container_width=True):
     else:
         st.warning("🟡 NO TRADE")
 
-    st.subheader("📊 RSI Trend")
+    st.subheader("📊 RSI Trend (15m)")
     st.line_chart(tf15["data"][["RSI", "RSI_MA20"]])
