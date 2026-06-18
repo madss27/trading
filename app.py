@@ -16,41 +16,38 @@ def calculate_rsi(close, period=14):
     return rsi
 
 # -----------------------------
-# DAILY TIMEFRAME ANALYSIS
+# DAILY ANALYSIS (ALWAYS WORKS)
 # -----------------------------
-def analyze_daily(symbol, period):
+def analyze_daily(symbol):
+    # Force enough data (3 months)
     df = yf.download(
         symbol,
-        period=period,
+        period="3mo",
         interval="1d",
         auto_adjust=True,
         progress=False
     )
 
-    if df is None or df.empty:
+    if df.empty:
         return {"error": "No daily data found. Check symbol."}
 
-    if len(df) < 30:
-        return {"error": "Not enough daily candles to calculate RSI."}
-
-    close = df["Close"]
-    df["RSI"] = calculate_rsi(close, 14)
+    df["RSI"] = calculate_rsi(df["Close"], 14)
     df["RSI_MA20"] = df["RSI"].rolling(20).mean()
 
     latest = df.iloc[-1]
 
-    rsi = latest["RSI"]
-    rsi_ma = latest["RSI_MA20"]
+    if pd.isna(latest["RSI"]) or pd.isna(latest["RSI_MA20"]):
+        return {"error": "RSI values not ready. Try again later."}
 
-    if pd.isna(rsi) or pd.isna(rsi_ma):
-        return {"error": "RSI values not ready yet. Try a larger period."}
+    rsi = float(latest["RSI"])
+    rsi_ma = float(latest["RSI_MA20"])
 
     call = (rsi > rsi_ma) and (rsi > 50)
     put = (rsi < rsi_ma) and (rsi < 50)
 
     return {
-        "RSI": float(rsi),
-        "RSI_MA20": float(rsi_ma),
+        "RSI": rsi,
+        "RSI_MA20": rsi_ma,
         "CALL": call,
         "PUT": put,
         "data": df
@@ -59,20 +56,17 @@ def analyze_daily(symbol, period):
 # -----------------------------
 # STREAMLIT UI
 # -----------------------------
-st.set_page_config(page_title="Trading Signal App", layout="wide")
+st.set_page_config(page_title="Daily Trading Signal", layout="wide")
 
 st.title("📈 Daily Trading Signal Analyzer")
-st.write("Stable RSI + MA20 analysis using **daily candles** (works 24/7).")
+st.write("Stable RSI + MA20 signals using **daily candles** (works 24/7).")
 
 symbol = st.text_input("Enter Stock Symbol (NSE):", value="RELIANCE.NS")
-period = st.selectbox("Data Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
-
-st.caption("Examples: RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, ^NSEI")
 
 if st.button("Run Analysis", use_container_width=True):
     st.subheader(f"Analyzing {symbol} (Daily)")
 
-    result = analyze_daily(symbol, period)
+    result = analyze_daily(symbol)
 
     if "error" in result:
         st.error(result["error"])
@@ -83,12 +77,4 @@ if st.button("Run Analysis", use_container_width=True):
 
     st.subheader("📌 Final Signal (Daily)")
 
-    if result["CALL"]:
-        st.success("🟢 CALL BUY SIGNAL (Daily)")
-    elif result["PUT"]:
-        st.error("🔴 PUT BUY SIGNAL (Daily)")
-    else:
-        st.warning("🟡 NO TRADE (Daily)")
-
-    st.subheader("📊 RSI Trend (Daily)")
-    st.line_chart(result["data"][["RSI", "RSI_MA20"]])
+    if
