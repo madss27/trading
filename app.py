@@ -3,6 +3,15 @@ import yfinance as yf
 import pandas as pd
 
 # -----------------------------
+# SAFE FLOAT CONVERSION
+# -----------------------------
+def safe_float(x):
+    try:
+        return float(x)
+    except:
+        return None
+
+# -----------------------------
 # RSI CALCULATION
 # -----------------------------
 def calculate_rsi(close, period=14):
@@ -16,30 +25,33 @@ def calculate_rsi(close, period=14):
     return rsi
 
 # -----------------------------
-# DAILY ANALYSIS (ALWAYS WORKS)
+# DAILY ANALYSIS (FLEXIBLE + SAFE)
 # -----------------------------
 def analyze_daily(symbol):
     df = yf.download(
         symbol,
-        period="3mo",        # Always enough candles
+        period="6mo",          # Always enough candles
         interval="1d",
         auto_adjust=True,
         progress=False
     )
 
     if df.empty:
-        return {"error": "No daily data found. Check symbol."}
+        return {"error": "No daily data found. Try another symbol."}
+
+    # Remove duplicate timestamps (NSE bug)
+    df = df[~df.index.duplicated(keep="last")]
 
     df["RSI"] = calculate_rsi(df["Close"], 14)
     df["RSI_MA20"] = df["RSI"].rolling(20).mean()
 
     latest = df.iloc[-1]
 
-    if pd.isna(latest["RSI"]) or pd.isna(latest["RSI_MA20"]):
-        return {"error": "RSI values not ready yet."}
+    rsi = safe_float(latest["RSI"])
+    rsi_ma = safe_float(latest["RSI_MA20"])
 
-    rsi = float(latest["RSI"])
-    rsi_ma = float(latest["RSI_MA20"])
+    if rsi is None or rsi_ma is None:
+        return {"error": "RSI not ready. Yahoo returned incomplete data."}
 
     call = (rsi > rsi_ma) and (rsi > 50)
     put = (rsi < rsi_ma) and (rsi < 50)
