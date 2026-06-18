@@ -19,10 +19,9 @@ def calculate_rsi(close, period=14):
 # DAILY ANALYSIS (ALWAYS WORKS)
 # -----------------------------
 def analyze_daily(symbol):
-    # Force enough data (3 months)
     df = yf.download(
         symbol,
-        period="3mo",
+        period="3mo",        # Always enough candles
         interval="1d",
         auto_adjust=True,
         progress=False
@@ -37,7 +36,7 @@ def analyze_daily(symbol):
     latest = df.iloc[-1]
 
     if pd.isna(latest["RSI"]) or pd.isna(latest["RSI_MA20"]):
-        return {"error": "RSI values not ready. Try again later."}
+        return {"error": "RSI values not ready yet."}
 
     rsi = float(latest["RSI"])
     rsi_ma = float(latest["RSI_MA20"])
@@ -77,4 +76,12 @@ if st.button("Run Analysis", use_container_width=True):
 
     st.subheader("📌 Final Signal (Daily)")
 
-    if
+    if result["CALL"]:
+        st.success("🟢 CALL BUY SIGNAL")
+    elif result["PUT"]:
+        st.error("🔴 PUT BUY SIGNAL")
+    else:
+        st.warning("🟡 NO TRADE")
+
+    st.subheader("📊 RSI Trend (Daily)")
+    st.line_chart(result["data"][["RSI", "RSI_MA20"]])
