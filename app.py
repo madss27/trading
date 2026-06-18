@@ -3,7 +3,7 @@ import yfinance as yf
 import pandas as pd
 
 # -----------------------------
-# SAFE FLOAT CONVERSION
+# SAFE FLOAT (prevents crashes)
 # -----------------------------
 def safe_float(x):
     try:
@@ -25,34 +25,38 @@ def calculate_rsi(close, period=14):
     return rsi
 
 # -----------------------------
-# DAILY ANALYSIS (FLEXIBLE + SAFE)
+# FLEXIBLE DAILY ANALYSIS
 # -----------------------------
 def analyze_daily(symbol):
     df = yf.download(
         symbol,
-        period="6mo",          # Always enough candles
+        period="6mo",          # Always enough data
         interval="1d",
         auto_adjust=True,
         progress=False
     )
 
     if df.empty:
-        return {"error": "No daily data found. Try another symbol."}
+        return {"RSI": None, "RSI_MA20": None, "CALL": False, "PUT": False, "data": None}
 
-    # Remove duplicate timestamps (NSE bug)
+    # Fix duplicate timestamps (common NSE bug)
     df = df[~df.index.duplicated(keep="last")]
 
+    # Calculate indicators
     df["RSI"] = calculate_rsi(df["Close"], 14)
     df["RSI_MA20"] = df["RSI"].rolling(20).mean()
 
     latest = df.iloc[-1]
 
+    # Convert safely
     rsi = safe_float(latest["RSI"])
     rsi_ma = safe_float(latest["RSI_MA20"])
 
+    # If RSI is missing → still return NO TRADE instead of error
     if rsi is None or rsi_ma is None:
-        return {"error": "RSI not ready. Yahoo returned incomplete data."}
+        return {"RSI": None, "RSI_MA20": None, "CALL": False, "PUT": False, "data": df}
 
+    # Signal logic
     call = (rsi > rsi_ma) and (rsi > 50)
     put = (rsi < rsi_ma) and (rsi < 50)
 
@@ -70,7 +74,7 @@ def analyze_daily(symbol):
 st.set_page_config(page_title="Daily Trading Signal", layout="wide")
 
 st.title("📈 Daily Trading Signal Analyzer")
-st.write("Stable RSI + MA20 signals using **daily candles** (works 24/7).")
+st.write("Flexible RSI + MA20 signals using **daily candles** (never crashes).")
 
 symbol = st.text_input("Enter Stock Symbol (NSE):", value="RELIANCE.NS")
 
@@ -79,12 +83,12 @@ if st.button("Run Analysis", use_container_width=True):
 
     result = analyze_daily(symbol)
 
-    if "error" in result:
-        st.error(result["error"])
-        st.stop()
-
-    st.metric("RSI (Daily)", f"{result['RSI']:.2f}")
-    st.metric("RSI MA20 (Daily)", f"{result['RSI_MA20']:.2f}")
+    # If RSI missing → show NO TRADE but DO NOT ERROR
+    if result["RSI"] is None:
+        st.warning("RSI not available. Showing NO TRADE.")
+    else:
+        st.metric("RSI (Daily)", f"{result['RSI']:.2f}")
+        st.metric("RSI MA20 (Daily)", f"{result['RSI_MA20']:.2f}")
 
     st.subheader("📌 Final Signal (Daily)")
 
@@ -95,5 +99,7 @@ if st.button("Run Analysis", use_container_width=True):
     else:
         st.warning("🟡 NO TRADE")
 
-    st.subheader("📊 RSI Trend (Daily)")
-    st.line_chart(result["data"][["RSI", "RSI_MA20"]])
+    # Show chart only if data exists
+    if result["data"] is not None:
+        st.subheader("📊 RSI Trend (Daily)")
+        st.line_chart(result["data"][["RSI", "RSI_MA20"]])
