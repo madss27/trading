@@ -19,6 +19,16 @@ def calculate_rsi(close, period=14):
 
 
 # -----------------------------
+# SAFE FLOAT CONVERSION
+# -----------------------------
+def safe_float(x):
+    try:
+        return float(x)
+    except:
+        return None
+
+
+# -----------------------------
 # TIMEFRAME ANALYSIS
 # -----------------------------
 def timeframe_analysis(symbol, period, interval):
@@ -30,13 +40,11 @@ def timeframe_analysis(symbol, period, interval):
         progress=False
     )
 
-    # No data at all
     if df is None or df.empty:
-        return {"error": "No data returned from Yahoo Finance. Check symbol or market hours."}
+        return {"error": "No data returned. Market may be closed or symbol invalid."}
 
-    # Basic sanity: need enough rows
-    if len(df) < 50:
-        return {"error": "Not enough candles for this interval. Try a larger period like 1mo or 3mo."}
+    if len(df) < 30:
+        return {"error": "Not enough candles for RSI. Try 1mo or 3mo period."}
 
     close = df["Close"]
     df["RSI"] = calculate_rsi(close, 14)
@@ -44,12 +52,12 @@ def timeframe_analysis(symbol, period, interval):
 
     latest = df.iloc[-1]
 
-    # SAFETY CHECKS (bulletproof)
-    if pd.isna(latest.get("RSI")) or pd.isna(latest.get("RSI_MA20")):
-        return {"error": "RSI values not ready yet. Try a larger period or different interval."}
+    rsi = safe_float(latest["RSI"])
+    rsi_ma = safe_float(latest["RSI_MA20"])
 
-    rsi = float(latest["RSI"])
-    rsi_ma = float(latest["RSI_MA20"])
+    # If conversion failed → NaN or Series
+    if rsi is None or rsi_ma is None:
+        return {"error": "RSI values not ready. Try a larger period or wait for market hours."}
 
     call = (rsi > rsi_ma) and (rsi > 50)
     put = (rsi < rsi_ma) and (rsi < 50)
@@ -82,13 +90,11 @@ if st.button("Run Analysis", use_container_width=True):
     tf5 = timeframe_analysis(symbol, period, "5m")
     tf15 = timeframe_analysis(symbol, period, "15m")
 
-    # Handle errors gracefully
     if "error" in tf5:
         st.error("5m timeframe: " + tf5["error"])
     if "error" in tf15:
         st.error("15m timeframe: " + tf15["error"])
 
-    # If either failed, stop here
     if ("error" in tf5) or ("error" in tf15):
         st.stop()
 
