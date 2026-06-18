@@ -16,82 +16,79 @@ def calculate_rsi(close, period=14):
     return rsi
 
 # -----------------------------
-# SAFE FLOAT
+# DAILY TIMEFRAME ANALYSIS
 # -----------------------------
-def safe_float(x):
-    try:
-        return float(x)
-    except:
-        return None
+def analyze_daily(symbol, period):
+    df = yf.download(
+        symbol,
+        period=period,
+        interval="1d",
+        auto_adjust=True,
+        progress=False
+    )
 
-# -----------------------------
-# TRY MULTIPLE INTERVALS
-# -----------------------------
-def get_valid_timeframe(symbol, period):
-    intervals = ["5m", "15m", "30m", "60m", "1d"]
+    if df is None or df.empty:
+        return {"error": "No daily data found. Check symbol."}
 
-    for interval in intervals:
-        df = yf.download(
-            symbol,
-            period=period,
-            interval=interval,
-            auto_adjust=True,
-            progress=False
-        )
+    if len(df) < 30:
+        return {"error": "Not enough daily candles to calculate RSI."}
 
-        if df is None or df.empty:
-            continue
+    close = df["Close"]
+    df["RSI"] = calculate_rsi(close, 14)
+    df["RSI_MA20"] = df["RSI"].rolling(20).mean()
 
-        if len(df) < 20:
-            continue
+    latest = df.iloc[-1]
 
-        close = df["Close"]
-        df["RSI"] = calculate_rsi(close, 14)
-        df["RSI_MA20"] = df["RSI"].rolling(20).mean()
+    rsi = latest["RSI"]
+    rsi_ma = latest["RSI_MA20"]
 
-        latest = df.iloc[-1]
+    if pd.isna(rsi) or pd.isna(rsi_ma):
+        return {"error": "RSI values not ready yet. Try a larger period."}
 
-        rsi = safe_float(latest["RSI"])
-        rsi_ma = safe_float(latest["RSI_MA20"])
+    call = (rsi > rsi_ma) and (rsi > 50)
+    put = (rsi < rsi_ma) and (rsi < 50)
 
-        if rsi is None or rsi_ma is None:
-            continue
-
-        return interval, rsi, rsi_ma, df
-
-    return None, None, None, None
+    return {
+        "RSI": float(rsi),
+        "RSI_MA20": float(rsi_ma),
+        "CALL": call,
+        "PUT": put,
+        "data": df
+    }
 
 # -----------------------------
 # STREAMLIT UI
 # -----------------------------
 st.set_page_config(page_title="Trading Signal App", layout="wide")
 
-st.title("📈 Trading Signal Analyzer")
-st.write("Live RSI + MA20 analysis for Indian stocks (NSE).")
+st.title("📈 Daily Trading Signal Analyzer")
+st.write("Stable RSI + MA20 analysis using **daily candles** (works 24/7).")
 
 symbol = st.text_input("Enter Stock Symbol (NSE):", value="RELIANCE.NS")
-period = st.selectbox("Data Period:", ["5d", "1mo", "3mo", "6mo", "1y"])
+period = st.selectbox("Data Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
+
+st.caption("Examples: RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, ^NSEI")
 
 if st.button("Run Analysis", use_container_width=True):
-    st.subheader(f"Analyzing {symbol}")
+    st.subheader(f"Analyzing {symbol} (Daily)")
 
-    interval, rsi, rsi_ma, df = get_valid_timeframe(symbol, period)
+    result = analyze_daily(symbol, period)
 
-    if interval is None:
-        st.error("No usable data found for ANY timeframe. Try another stock.")
+    if "error" in result:
+        st.error(result["error"])
         st.stop()
 
-    st.success(f"Using timeframe: {interval}")
+    st.metric("RSI (Daily)", f"{result['RSI']:.2f}")
+    st.metric("RSI MA20 (Daily)", f"{result['RSI_MA20']:.2f}")
 
-    st.metric("RSI", f"{rsi:.2f}")
-    st.metric("RSI MA20", f"{rsi_ma:.2f}")
+    st.subheader("📌 Final Signal (Daily)")
 
-    if rsi > rsi_ma and rsi > 50:
-        st.success("🟢 CALL BUY SIGNAL")
-    elif rsi < rsi_ma and rsi < 50:
-        st.error("🔴 PUT BUY SIGNAL")
+    if result["CALL"]:
+        st.success("🟢 CALL BUY SIGNAL (Daily)")
+    elif result["PUT"]:
+        st.error("🔴 PUT BUY SIGNAL (Daily)")
     else:
-        st.warning("🟡 NO TRADE")
+        st.warning("🟡 NO TRADE (Daily)")
 
-    st.subheader("📊 RSI Trend")
-    st.line_chart(df[["RSI", "RSI_MA20"]])
+    st.subheader("📊 RSI Trend (Daily)")
+    st.line_chart(result["data"][["RSI", "RSI_MA20"]])
