@@ -9,3 +9,4 @@ streamlit run app.py
 
 ## Deploy:
 Upload to GitHub → Deploy on Streamlit Cloud.
+## HAVE FUN TRADING
